@@ -1,2 +1,2 @@
 # ansible-ucs
-Ansible modules and playbooks for Cisco UCS
+Ansible modules for Cisco UCS
