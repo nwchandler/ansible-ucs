@@ -103,8 +103,8 @@ def updateVlans(module):
                 handle.RemoveManagedObject(obj)
                 results['changed'] = True
                 results['removed'].append(key)
-    except:
-        module.fail_json(msg="Could not create or validate VLANs")
+    except Exception, e:
+        module.fail_json(msg="Could not create or validate VLANs; %s" % e)
     finally:
         handle.Logout()
     return results
