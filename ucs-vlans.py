@@ -10,7 +10,7 @@ description:
     are present or absent on Cisco Unified Computing System (UCS)
     platforms.
 requirements:
-  - ucssdk
+  - ucsmsdk
 options:
   ucs_ip:
     description:
@@ -38,9 +38,8 @@ options:
     choices: ['present', 'absent']
 '''
 
-from UcsSdk import *
-from UcsSdk.MoMeta.FabricLanCloud import FabricLanCloud
-from UcsSdk.MoMeta.FabricVlan import FabricVlan
+from ucsmsdk.ucshandle import UcsHandle
+from ucsmsdk.mometa.fabric.FabricVlan import FabricVlan
 
 def updateVlans(module):
     
@@ -59,54 +58,45 @@ def updateVlans(module):
     
     # Login to UCS
     try:
-        handle = UcsHandle()
-        login_status = handle.Login(
-                ucs_ip,
-                ucs_user,
-                ucs_pass
-        )
+        handle = UcsHandle(ucs_ip, ucs_user, ucs_pass)
     except:
         module.fail_json(msg="Could not login to UCS")
     
     try:
         # Obtain a handle for the LAN Cloud
-        lanCloud = handle.GetManagedObject(
-                None,
-                FabricLanCloud.ClassId()
-        )
+        lancloud = handle.query_classid(class_id="FabricLanCloud")
+
+        defined_vlans = handle.query_children(
+                in_mo=lancloud[0], 
+                class_id="FabricVlan"
+                )
 
         for key, val in vlans.iteritems():
-
-            obj = handle.GetManagedObject(
-                    lanCloud,
-                    FabricVlan.ClassId(),
-                    {
-                            FabricVlan.ID:val,
-                            FabricVlan.NAME:key
-                    }
-            )
+            filter_str = '(name, "%s", type="eq") and (id, %s, type="eq")' \
+                        % (key, val) 
+            obj = handle.query_children(
+                        in_mo=lancloud[0], 
+                        class_id="FabricVlan", 
+                        filter_str=filter_str
+                        )
 
             if state == 'present' and len(obj) > 0:
                 pass
             elif state == 'present' and len(obj) == 0:
-                handle.AddManagedObject(     
-                        lanCloud,                       
-                        FabricVlan.ClassId(),
-                        {
-                                FabricVlan.ID:val,           
-                                FabricVlan.NAME:key
-                        }
-                )
+                vlan = FabricVlan(lancloud[0], name=key, id=str(val))
+                handle.add_mo(vlan)
+                handle.commit()
                 results['created'].append(key)
                 results['changed'] = True
             elif state == 'absent' and len(obj) > 0:
-                handle.RemoveManagedObject(obj)
+                handle.remove_mo(obj[0])
+                handle.commit()
                 results['changed'] = True
                 results['removed'].append(key)
     except Exception, e:
         module.fail_json(msg="Could not create or validate VLANs; %s" % e)
     finally:
-        handle.Logout()
+        handle.logout()
     return results
 
 def main():
