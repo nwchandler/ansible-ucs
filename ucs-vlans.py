@@ -37,9 +37,12 @@ options:
     default: present
     choices: ['present', 'absent']
 '''
-
-from ucsmsdk.ucshandle import UcsHandle
-from ucsmsdk.mometa.fabric.FabricVlan import FabricVlan
+try:
+    from ucsmsdk.ucshandle import UcsHandle
+    from ucsmsdk.mometa.fabric.FabricVlan import FabricVlan
+    UCSMSDK_IMPORTED = True
+except ImportError:
+    UCSMSDK_IMPORTED = False
 
 def updateVlans(module):
     
@@ -113,6 +116,9 @@ def main():
         supports_check_mode = False
     )
 
+    if not UCSMSDK_IMPORTED:
+        module.fail_json(msg="Module requires ucsmsdk")
+        
     results = updateVlans(module)
 
     module.exit_json(**results)
