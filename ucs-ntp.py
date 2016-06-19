@@ -10,7 +10,7 @@ description:
     are present or absent on Cisco Unified Computing System (UCS)
     platforms.
 requirements:
-  - ucssdk
+  - ucsmsdk
 options:
   ucs_ip:
     description:
@@ -37,9 +37,12 @@ options:
     choices: ['present', 'absent']
 '''
 
-from UcsSdk import *
-from UcsSdk.MoMeta.CommDateTime import CommDateTime
-from UcsSdk.MoMeta.CommNtpProvider import CommNtpProvider
+try:
+    from ucsmsdk.ucshandle import UcsHandle
+    from ucsmsdk.mometa.comm.CommNtpProvider import CommNtpProvider
+    UCSMSDK_IMPORTED = True
+except ImportError:
+    UCSMSDK_IMPORTED = False
 
 def updateNtp(module):
     
@@ -58,55 +61,42 @@ def updateNtp(module):
     
     # Login to UCS
     try:
-        handle = UcsHandle()
-        login_status = handle.Login(
-                ucs_ip,
-                ucs_user,
-                ucs_pass
-        )
+        handle = UcsHandle(ucs_ip, ucs_user, ucs_pass)
     except:
         module.fail_json(msg="Could not login to UCS")
     
     try:
         # Obtain a handle for the Timezone object
-        tz = handle.GetManagedObject(
-                None,
-                CommDateTime.ClassId()
-        )
+        tz = handle.query_classid(class_id="CommDateTime")
 
         if type(ntp) != list:
             ntp = list(ntp)
 
         for server in ntp:
-
-            obj = handle.GetManagedObject(
-                    tz,
-                    CommNtpProvider.ClassId(),
-                    {
-                            CommNtpProvider.NAME:server
-                    }
-            )
+            filter_str = '(name, "%s", type="eq")' % (server)
+            obj = handle.query_children(
+                        in_mo=tz[0], 
+                        class_id="CommNtpProvider",
+                        filter_str=filter_str
+                        )
 
             if state == 'present' and len(obj) > 0:
                 pass
             elif state == 'present' and len(obj) == 0:
-                handle.AddManagedObject(     
-                        tz,                       
-                        CommNtpProvider.ClassId(),
-                        {
-                                CommNtpProvider.NAME:server
-                        }
-                )
+                ntp_server = CommNtpProvider(tz[0], name=server)
+                handle.add_mo(ntp_server)
+                handle.commit()
                 results['created'].append(server)
                 results['changed'] = True
             elif state == 'absent' and len(obj) > 0:
-                handle.RemoveManagedObject(obj)
+                handle.remove_mo(obj[0])
+                handle.commit()
                 results['changed'] = True
                 results['removed'].append(server)
     except Exception, e:
         module.fail_json(msg="Could not create or validate servers; %s" % e)
     finally:
-        handle.Logout()
+        handle.logout()
     return results
 
 def main():
@@ -122,6 +112,9 @@ def main():
             ),
         supports_check_mode = False
     )
+
+    if not UCSMSDK_IMPORTED:
+        module.fail_json(msg="Module requires ucsmsdk")
 
     results = updateNtp(module)
 
